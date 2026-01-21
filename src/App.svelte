@@ -66,7 +66,6 @@
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "use-Dev": "true",
         },
         body: JSON.stringify({
           onlypartners: true,
@@ -205,7 +204,6 @@
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          "use-Dev": "true",
         },
         body: JSON.stringify(dataToSend),
       });
@@ -359,7 +357,14 @@
                 <div class="flex-grow href_work">
                   <span>온라인 정품인증서 주소</span>
                   <input type="text" value={Object.values(object).every(value => !!value) ? `https://b2b.soundcat.com/cert/${object.uuid}.gif` : ""} readonly disabled={!object.uuid} onfocus={e => e.currentTarget.select()} />
-                  <button type="button">복사</button>
+                  <button
+                    type="button"
+                    onclick={() => {
+                      if (Object.values(object).every(value => !!value)) {
+                        navigator.clipboard.writeText(`https://b2b.soundcat.com/cert/${object.uuid}.gif`);
+                        alert("클립보드에 복사되었습니다.");
+                      }
+                    }}>복사</button>
                 </div>
               </div>
               <div class="flex">
