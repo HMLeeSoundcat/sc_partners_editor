@@ -82,6 +82,7 @@
           options: membersList,
           maxOptions: undefined,
           maxItems: 1,
+          refreshThrottle: 0,
           placeholder: "업체명 선택...",
           valueField: "mb_nick",
           labelField: "mb_nick",
@@ -187,6 +188,11 @@
 
     const formData = new FormData(partnersForm);
 
+    if (memberData?.certification) {
+      memberData.certification.main = memberData.certification.main.filter(item => !!item.uuid);
+      memberData.certification.sub = memberData.certification.sub.filter(item => !!item.uuid);
+    }
+
     const dataToSend: any = {};
     formData.forEach((value, key) => {
       dataToSend[key] = value;
@@ -214,6 +220,18 @@
     } catch (e) {
       console.error("Error updating partner:", e);
       alert("저장 중 오류가 발생했습니다.");
+    }
+  }
+
+  function fieldCheck(object: CertFields) {
+    const excludeUUIDFields: { [key: string]: any } = { ...object };
+    delete excludeUUIDFields.uuid;
+    if (Object.values(excludeUUIDFields).every(value => !!value)) {
+      if (!object.uuid) {
+        object.uuid = crypto.randomUUID();
+      }
+    } else {
+      object.uuid = "";
     }
   }
 </script>
@@ -316,29 +334,29 @@
               <div class="_row">
                 <div class="_col _col-4">
                   <span class="label">{title} 거래처 상호명</span>
-                  <label class="input"><input type="text" name="main-cert-company" bind:value={object.companyName} /></label>
+                  <label class="input"><input type="text" name="main-cert-company" oninput={() => fieldCheck(object)} bind:value={object.companyName} /></label>
                 </div>
                 <div class="_col _col-4">
                   <span class="label">{title} 거래처 스토어명</span>
-                  <label class="input"><input type="text" name="main-cert-store" bind:value={object.storeName} /></label>
+                  <label class="input"><input type="text" name="main-cert-store" oninput={() => fieldCheck(object)} bind:value={object.storeName} /></label>
                 </div>
                 <div class="_col _col-4">
                   <span class="label">거래처 이메일</span>
-                  <label class="input"><input type="text" name="main-cert-email" bind:value={object.email} /></label>
+                  <label class="input"><input type="text" name="main-cert-email" oninput={() => fieldCheck(object)} bind:value={object.email} /></label>
                 </div>
               </div>
               <div class="_row">
                 <div class="_col _col-4">
                   <span class="label">대표자 성함</span>
-                  <label class="input"><input type="text" name="main-cert-ceo" bind:value={object.ceoName} /></label>
+                  <label class="input"><input type="text" name="main-cert-ceo" oninput={() => fieldCheck(object)} bind:value={object.ceoName} /></label>
                 </div>
                 <div class="_col _col-4">
                   <span class="label">업체 연락처</span>
-                  <label class="input"><input type="text" name="main-cert-phoneNum" bind:value={object.phoneNum} /></label>
+                  <label class="input"><input type="text" name="main-cert-phoneNum" oninput={() => fieldCheck(object)} bind:value={object.phoneNum} /></label>
                 </div>
                 <div class="_col _col-4">
                   <span class="label">거래처 주소</span>
-                  <label class="input"><input type="text" name="main-cert-addr" bind:value={object.storeAddr} /></label>
+                  <label class="input"><input type="text" name="main-cert-addr" oninput={() => fieldCheck(object)} bind:value={object.storeAddr} /></label>
                 </div>
               </div>
               <div class="flex align-end gap-1em flex-wrap mb-1em">
@@ -356,12 +374,12 @@
                 </div>
                 <div class="flex-grow href_work">
                   <span>온라인 정품인증서 주소</span>
-                  <input type="text" value={Object.values(object).every(value => !!value) ? `https://b2b.soundcat.com/cert/${object.uuid}.gif` : ""} readonly disabled={!object.uuid} onfocus={e => e.currentTarget.select()} />
+                  <input type="text" value={Object.values(object).every(value => !!value) ? `https://b2b.soundcat.com/cert/${object.uuid}.png` : ""} readonly disabled={!object.uuid} onfocus={e => e.currentTarget.select()} />
                   <button
                     type="button"
                     onclick={() => {
                       if (Object.values(object).every(value => !!value)) {
-                        navigator.clipboard.writeText(`https://b2b.soundcat.com/cert/${object.uuid}.gif`);
+                        navigator.clipboard.writeText(`https://b2b.soundcat.com/cert/${object.uuid}.png`);
                         alert("클립보드에 복사되었습니다.");
                       }
                     }}>복사</button>
