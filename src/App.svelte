@@ -1,11 +1,12 @@
 <script lang="ts">
   import type TomSelectType from "tom-select";
   import { onMount } from "svelte";
+  import { SvelteSet } from "svelte/reactivity";
 
   interface MemberData {
     storeName: string;
-    brands: string;
-    alternativeAddr: string;
+    brands: string | string[];
+    alternativeAddr: string | string[];
     alternativeHp: string;
     days: string;
     holidays: "1" | "0" | "";
@@ -30,6 +31,9 @@
     storeAddr: string;
   }
 
+  let brands = $state<Array<string>>([]);
+  let brandsInput: HTMLInputElement | undefined = $state();
+
   let memberSelection: HTMLInputElement | undefined = $state();
   let member: string | undefined = $state();
   let memberData: MemberData | undefined = $state();
@@ -37,7 +41,11 @@
   let memberType: "0" | "1" | "2" | "3" = $state("0");
   let partnersForm: HTMLFormElement | undefined = $state();
 
+  let alternativeAddrInput: HTMLInputElement | undefined = $state();
+
   let ts: TomSelectType | undefined = $state();
+  let brandsTs: TomSelectType | undefined = $state();
+  let alternativeAddrTs: TomSelectType | undefined = $state();
 
   let membersList = $state<Array<{ mb_no: string; mb_id: string; mb_nick: string; mb_5: string; mb_6: string; mb_8: string }>>([]);
 
@@ -59,13 +67,164 @@
     }
   });
 
+  $effect(() => {
+    if (member && memberData && brandsInput) {
+      setTimeout(() => {
+        if (member && memberData && brandsInput) {
+          if (brandsTs) {
+            brandsTs.destroy();
+          }
+          brandsTs = new TomSelect(brandsInput, {
+            options: brands.map(brand => ({ value: brand, text: brand })),
+            items: Array.isArray(memberData.brands) ? memberData.brands : typeof memberData.brands === "string" ? memberData.brands.split(",").map(str => str.trim()) : [],
+            maxOptions: undefined,
+            create: true,
+            persist: false,
+            openOnFocus: true,
+          });
+        }
+      }, 0);
+    }
+  });
+
+  $effect(() => {
+    if (member && memberData && alternativeAddrInput) {
+      setTimeout(() => {
+        if (member && memberData && alternativeAddrInput) {
+          if (alternativeAddrTs) {
+            alternativeAddrTs.destroy();
+          }
+          alternativeAddrTs = new TomSelect(alternativeAddrInput, {
+            items: Array.isArray(memberData.alternativeAddr) ? memberData.alternativeAddr : [memberData.alternativeAddr],
+            maxOptions: undefined,
+            create: true,
+            persist: false,
+            openOnFocus: true,
+          });
+        }
+      }, 0);
+    }
+  });
+
   onMount(async () => {
-    mb_nick_param = new URL(location.href).searchParams.get("mb_nick");
+    (async () => {
+      mb_nick_param = new URL(location.href).searchParams.get("mb_nick");
+      await getMembers();
+      memberSelectboxInit();
+    })();
+    brands.push(...(await getBrands()));
+  });
+
+  function memberSelectboxInit() {
+    if (memberSelection)
+      ts = new TomSelect(memberSelection, {
+        plugins: ["optgroup_columns"],
+        options: membersList,
+        maxOptions: undefined,
+        maxItems: 1,
+        refreshThrottle: 0,
+        placeholder: "업체명 선택...",
+        valueField: "mb_nick",
+        labelField: "mb_nick",
+        searchField: ["mb_nick"],
+        optgroups: [
+          {
+            value: "0",
+            label: "취급유형: 표시 안함",
+          },
+          {
+            value: "1",
+            label: "취급유형: 프로오디오",
+          },
+          {
+            value: "2",
+            label: "취급유형: 컨슈머오디오",
+          },
+          {
+            value: "3",
+            label: "취급유형: 모두 취급",
+          },
+        ],
+        optgroupField: "mb_5",
+        onChange: (value: string | undefined) => {
+          member = value;
+          const result = membersList.find(obj => obj.mb_nick === value);
+
+          if (!value) return;
+          let json;
+          try {
+            if (!(result && result.mb_6)) throw new Error("No mb_6 data");
+            json = JSON.parse(result.mb_6);
+          } catch (error) {
+            console.warn("JSON 파싱이 실패했습니다.");
+            console.warn(error);
+            console.warn(result?.mb_6.replaceAll("\n", "\\n"));
+          }
+          memberType = result ? (result.mb_5 as "0" | "1" | "2" | "3") : "0";
+
+          if (json && typeof json === "object" && !json.certification) {
+            json.certification = {
+              main: [
+                {
+                  storeName: "",
+                  companyName: "",
+                  email: "",
+                  ceoName: "",
+                  phoneNum: "",
+                  uuid: "",
+                },
+              ],
+              sub: [],
+            };
+          }
+
+          memberData = json ?? {
+            storeName: value,
+            brands: "",
+            alternativeAddr: "",
+            alternativeHp: "",
+            days: "",
+            holidays: "",
+            worktime: "",
+            storeimgURL: "",
+            navermapURL: "",
+            kakaomapURL: "",
+            details: "",
+            certification: {
+              main: [
+                {
+                  storeName: "",
+                  companyName: "",
+                  email: "",
+                  ceoName: "",
+                  phoneNum: "",
+                  uuid: "",
+                  storeAddr: "",
+                },
+              ],
+              sub: [],
+            },
+          };
+
+          const url = new URL(location.href);
+          url.searchParams.set("mb_nick", value);
+          history.pushState(null, "", url);
+        },
+        render: {
+          optgroup_header: function (data: { label: string; value: string }, escape: (str: string) => string) {
+            return '<div class="optgroup-header">' + escape(data.label) + "</div>";
+          },
+        },
+      });
+  }
+
+  async function getMembers() {
     try {
       const response = await fetch("https://b2b.soundcat.com/page/get_members.php", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Use-Dev": "true",
         },
         body: JSON.stringify({
           onlypartners: true,
@@ -76,110 +235,32 @@
 
       if (result.result !== "success") throw new Error(result.message || "Failed to fetch members");
       membersList = result.data;
-      if (memberSelection)
-        ts = new TomSelect(memberSelection, {
-          plugins: ["optgroup_columns"],
-          options: membersList,
-          maxOptions: undefined,
-          maxItems: 1,
-          refreshThrottle: 0,
-          placeholder: "업체명 선택...",
-          valueField: "mb_nick",
-          labelField: "mb_nick",
-          searchField: ["mb_nick"],
-          optgroups: [
-            {
-              value: "0",
-              label: "취급유형: 표시 안함",
-            },
-            {
-              value: "1",
-              label: "취급유형: 프로오디오",
-            },
-            {
-              value: "2",
-              label: "취급유형: 컨슈머오디오",
-            },
-            {
-              value: "3",
-              label: "취급유형: 모두 취급",
-            },
-          ],
-          optgroupField: "mb_5",
-          onChange: (value: string | undefined) => {
-            member = value;
-            const result = membersList.find(obj => obj.mb_nick === value);
-
-            if (!value) return;
-            let json;
-            try {
-              if (!(result && result.mb_6)) throw new Error("No mb_6 data");
-              json = JSON.parse(result.mb_6);
-            } catch (error) {
-              console.warn("JSON 파싱이 실패했습니다.");
-              console.warn(error);
-              console.warn(result?.mb_6.replaceAll("\n", "\\n"));
-            }
-            memberType = result ? (result.mb_5 as "0" | "1" | "2" | "3") : "0";
-
-            if (json && typeof json === "object" && !json.certification) {
-              json.certification = {
-                main: [
-                  {
-                    storeName: "",
-                    companyName: "",
-                    email: "",
-                    ceoName: "",
-                    phoneNum: "",
-                    uuid: "",
-                  },
-                ],
-                sub: [],
-              };
-            }
-
-            memberData = json ?? {
-              storeName: value,
-              brands: "",
-              alternativeAddr: "",
-              alternativeHp: "",
-              days: "",
-              holidays: "",
-              worktime: "",
-              storeimgURL: "",
-              navermapURL: "",
-              kakaomapURL: "",
-              details: "",
-              certification: {
-                main: [
-                  {
-                    storeName: "",
-                    companyName: "",
-                    email: "",
-                    ceoName: "",
-                    phoneNum: "",
-                    uuid: "",
-                    storeAddr: "",
-                  },
-                ],
-                sub: [],
-              },
-            };
-
-            const url = new URL(location.href);
-            url.searchParams.set("mb_nick", value);
-            history.pushState(null, "", url);
-          },
-          render: {
-            optgroup_header: function (data: { label: string; value: string }, escape: (str: string) => string) {
-              return '<div class="optgroup-header">' + escape(data.label) + "</div>";
-            },
-          },
-        });
     } catch (e) {
       console.error("Error fetching members:", e);
     }
-  });
+  }
+
+  async function getBrands() {
+    try {
+      const response = await fetch("https://b2b.soundcat.com/page/get_products.php", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          UseDev: "true",
+        },
+        body: JSON.stringify({
+          key: "get_brands",
+        }),
+      });
+      const result = await response.json();
+
+      if (result.result !== "success") throw new Error(result.message || "Failed to fetch brands");
+      return result.data.map((item: { name: string }) => item.name);
+    } catch (e) {
+      console.error("Error fetching brands:", e);
+      return [];
+    }
+  }
 
   async function submitAction(event: Event) {
     event.preventDefault();
@@ -203,6 +284,7 @@
       ...memberData,
       brands: dataToSend.brands.split(",").map((str: string) => str.trim()),
       storeimgURL: dataToSend.storeimgURL.split(",").map((str: string) => str.trim()),
+      alternativeAddr: alternativeAddrTs?.items ? alternativeAddrTs.items : dataToSend.alternativeAddr,
     };
 
     try {
@@ -272,11 +354,11 @@
             </div>
             <div class="_col _col-4">
               <span class="label">청음 및 시연 가능 브랜드</span>
-              <label class="input"><input type="text" name="brands" bind:value={memberData.brands} /></label>
+              <label class="input ts_input"><input type="text" name="brands" bind:value={memberData.brands} bind:this={brandsInput} /></label>
             </div>
             <div class="_col _col-4">
               <span class="label">대체 주소 <span class="small">(공백시 업체 가입 정보 사용)</span></span>
-              <label class="input"><input type="text" name="alternativeAddr" bind:value={memberData.alternativeAddr} /></label>
+              <label class="input ts_input"><input type="text" name="alternativeAddr" bind:value={memberData.alternativeAddr} bind:this={alternativeAddrInput} /></label>
             </div>
           </div>
           <div class="_row">
@@ -658,5 +740,9 @@
 
   ._col-6 {
     flex-basis: calc(16.66% * 6 - 0.666em);
+  }
+
+  .ts_input :global(.ts-control) {
+    overflow-y: auto;
   }
 </style>
